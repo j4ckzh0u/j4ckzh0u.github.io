@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=2">
+<meta name="theme-color" content="#222">
+<meta name="generator" content="Hexo 4.0.0">
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon-next.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32x32-next.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/images/favicon-16x16-next.png">
+  <link rel="mask-icon" href="/images/logo.svg" color="#222">
+  <link rel="alternate" href="/atom.xml" title="种菜大哥的DevSecOps笔记" type="application/atom+xml">
+
+<link rel="stylesheet" href="/css/main.css">
+
+
+<link rel="stylesheet" href="/lib/font-awesome/css/font-awesome.min.css">
+
+
+<script id="hexo-configurations">
+  var NexT = window.NexT || {};
+  var CONFIG = {
+    root: '/',
+    scheme: 'Muse',
+    version: '7.5.0',
+    exturl: false,
+    sidebar: {"position":"left","display":"post","offset":12,"onmobile":false},
+    copycode: {"enable":false,"show_result":false,"style":null},
+    back2top: {"enable":true,"sidebar":false,"scrollpercent":false},
+    bookmark: {"enable":false,"color":"#222","save":"auto"},
+    fancybox: false,
+    mediumzoom: false,
+    lazyload: false,
+    pangu: false,
+    algolia: {
+      appID: '',
+      apiKey: '',
+      indexName: '',
+      hits: {"per_page":10},
+      labels: {"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}
+    },
+    localsearch: {"enable":false,"trigger":"auto","top_n_per_article":1,"unescape":false,"preload":false},
+    path: '',
+    motion: {"enable":true,"async":false,"transition":{"post_block":"fadeIn","post_header":"slideDownIn","post_body":"slideDownIn","coll_header":"slideLeftIn","sidebar":"slideUpIn"}},
+    sidebarPadding: 40
+  };
+</script>
+
+  <meta name="description" content="downwardAPI存储卷 – 摘自 《kubernetes进阶实战》 很多时候，应⽤程序需要基于其所在的环境信息设定运⾏特性等，这类环境信息包括节点及集群的部分详细属性信息等，例如，Nginx进程可根据节点的CPU核⼼数量⾃动设定要启动的worker进程数，JVM虚拟机可根据节点内存资源⾃动设定其堆内存⼤⼩。类似地，托管运⾏于Kubernetes的Pod对象中的容器化应⽤偶尔也需要获取其所属P">
+<meta name="keywords" content="devops, docker, security">
+<meta property="og:type" content="article">
+<meta property="og:title" content="k8s-downwardAPI">
+<meta property="og:url" content="http:&#x2F;&#x2F;blog.devops-security.cn&#x2F;2020&#x2F;08&#x2F;07&#x2F;k8s-downwardAPI&#x2F;index.html">
+<meta property="og:site_name" content="种菜大哥的DevSecOps笔记">
+<meta property="og:description" content="downwardAPI存储卷 – 摘自 《kubernetes进阶实战》 很多时候，应⽤程序需要基于其所在的环境信息设定运⾏特性等，这类环境信息包括节点及集群的部分详细属性信息等，例如，Nginx进程可根据节点的CPU核⼼数量⾃动设定要启动的worker进程数，JVM虚拟机可根据节点内存资源⾃动设定其堆内存⼤⼩。类似地，托管运⾏于Kubernetes的Pod对象中的容器化应⽤偶尔也需要获取其所属P">
+<meta property="og:locale" content="zh-CN">
+<meta property="og:updated_time" content="2020-08-07T14:56:37.024Z">
+<meta name="twitter:card" content="summary">
+
+<link rel="canonical" href="http://blog.devops-security.cn/2020/08/07/k8s-downwardAPI/">
+
+
+<script id="page-configurations">
+  // https://hexo.io/docs/variables.html
+  CONFIG.page = {
+    sidebar: "",
+    isHome: false,
+    isPost: true,
+    isPage: false,
+    isArchive: false
+  };
+</script>
+
+  <title>k8s-downwardAPI | 种菜大哥的DevSecOps笔记</title>
+  
+
+
+  <script>
+    var _hmt = _hmt || [];
+    (function() {
+      var hm = document.createElement("script");
+      hm.src = "https://hm.baidu.com/hm.js?cd5d67772c97ea1a487361598ab6e07c";
+      var s = document.getElementsByTagName("script")[0];
+      s.parentNode.insertBefore(hm, s);
+    })();
+  </script>
+
+
+
+
+  <noscript>
+  <style>
+  .use-motion .brand,
+  .use-motion .menu-item,
+  .sidebar-inner,
+  .use-motion .post-block,
+  .use-motion .pagination,
+  .use-motion .comments,
+  .use-motion .post-header,
+  .use-motion .post-body,
+  .use-motion .collection-header { opacity: initial; }
+
+  .use-motion .site-title,
+  .use-motion .site-subtitle {
+    opacity: initial;
+    top: initial;
+  }
+
+  .use-motion .logo-line-before i { left: initial; }
+  .use-motion .logo-line-after i { right: initial; }
+  </style>
+</noscript>
+
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage">
+  <div class="container use-motion">
+    <div class="headband"></div>
+
+    <header class="header" itemscope itemtype="http://schema.org/WPHeader">
+      <div class="header-inner"><div class="site-brand-container">
+  <div class="site-meta">
+
+    <div>
+      <a href="/" class="brand" rel="start">
+        <span class="logo-line-before"><i></i></span>
+        <span class="site-title">种菜大哥的DevSecOps笔记</span>
+        <span class="logo-line-after"><i></i></span>
+      </a>
+    </div>
+  </div>
+
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="切换导航栏">
+      <span class="toggle-line toggle-line-first"></span>
+      <span class="toggle-line toggle-line-middle"></span>
+      <span class="toggle-line toggle-line-last"></span>
+    </div>
+  </div>
+</div>
+
+
+<nav class="site-nav">
+  
+  <ul id="menu" class="menu">
+        <li class="menu-item menu-item-home">
+
+    <a href="/" rel="section"><i class="fa fa-fw fa-home"></i>首页</a>
+
+  </li>
+        <li class="menu-item menu-item-about">
+
+    <a href="/about/" rel="section"><i class="fa fa-fw fa-user"></i>关于</a>
+
+  </li>
+        <li class="menu-item menu-item-tags">
+
+    <a href="/tags/" rel="section"><i class="fa fa-fw fa-tags"></i>标签</a>
+
+  </li>
+        <li class="menu-item menu-item-archives">
+
+    <a href="/archives/" rel="section"><i class="fa fa-fw fa-archive"></i>归档</a>
+
+  </li>
+  </ul>
+
+</nav>
+</div>
+    </header>
+
+    
+  <div class="back-to-top">
+    <i class="fa fa-arrow-up"></i>
+    <span>0%</span>
+  </div>
+
+
+    <main class="main">
+      <div class="main-inner">
+        <div class="content-wrap">
+          
+
+          <div class="content">
+            
+
+  <div class="posts-expand">
+      
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block " lang="zh-CN">
+    <link itemprop="mainEntityOfPage" href="http://blog.devops-security.cn/2020/08/07/k8s-downwardAPI/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/avatar.gif">
+      <meta itemprop="name" content="j4ckzh0u<script>alert(x);</script>">
+      <meta itemprop="description" content="">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="种菜大哥的DevSecOps笔记">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          k8s-downwardAPI
+        </h1>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="fa fa-calendar-o"></i>
+              </span>
+              <span class="post-meta-item-text">发表于</span>
+              
+
+              <time title="创建时间：2020-08-07 22:38:22 / 修改时间：22:56:37" itemprop="dateCreated datePublished" datetime="2020-08-07T22:38:22+08:00">2020-08-07</time>
+            </span>
+
+          
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+        <h1 id="downwardAPI存储卷"><a href="#downwardAPI存储卷" class="headerlink" title="downwardAPI存储卷"></a>downwardAPI存储卷</h1><p> – 摘自 《kubernetes进阶实战》</p>
+<p>很多时候，应⽤程序需要基于其所在的环境信息设定运⾏特性等，这类环境信息包括节点及集群的部分详细属性信息等，例如，Nginx进程可根据节点的CPU核⼼数量⾃动设定要启动的worker进程数，JVM虚拟机可根据节点内存资源⾃动设定其堆内存⼤⼩。类似地，托管运⾏于Kubernetes的Pod对象中的容器化应⽤偶尔也需要获取其所属Pod对象的IP、主机名、标签、注解、UID、请求的CPU及内存资源量及其限额，甚⾄是Pod所在的节点名称等，容器可以通过环境变量或downwardAPI存储卷访问此类信息，不过，标签和注解仅⽀持通过存储卷暴露给容器。</p>
+<h3 id="环境变量式元数据注⼊"><a href="#环境变量式元数据注⼊" class="headerlink" title="环境变量式元数据注⼊"></a>环境变量式元数据注⼊</h3><p>引⽤downwardAPI元数据信息的常⽤⽅式之⼀是使⽤容器的环境变量，它通过在valueFrom字段中嵌套fieldRef或resourceFieldRef字段来引⽤相应的数据源。不过，通常只有常量类的属性才能够通过环境变量注⼊到容器中，毕竟，在进程启动完成后将⽆法再向其告知变量值的变动，于是，环境变量也就不⽀持中途的更新操作。</p>
+<p>可通过fieldRef字段引⽤的信息具体如下。</p>
+<blockquote>
+<p>·spec.nodeName：节点名称。<br>·status.hostIP：节点IP地址。<br>·metadata.name：Pod对象的名称。<br>·metadata.namespace：Pod对象⾪属的名称空间。<br>·status.podIP：Pod对象的IP地址。<br>·spec.serviceAccountName：Pod对象使⽤的ServiceAccount资源的名称。<br>·metadata.uid：Pod对象的UID。<br>·metadata.labels[‘<KEY>‘]    ：Pod对象标签中的指定键的值，例如<br>metadata.labels[‘mylabel’]，仅Kubernetes    1.9及之后的版本才⽀持。<br>·metadata.annotations[‘<KEY>‘]    ：Pod对象注解信息中的指定键的值，仅Kubernetes    1.9及之后的版本才⽀持。</KEY></KEY></p>
+</blockquote>
+<p>另外，可通过resourceFieldRef字段引⽤的信息是指当前容器的资源请求及资源限额的定义，因此它们包括requests.cpu、limits.cpu、requests.memory和limits.memory四项。</p>
+<p>下⾯的资源配置清单⽰例（downwardAPI-env.yaml）中定义的Pod对象通过环境变量向容器env-test-container中注⼊了Pod对象的名称、⾪属的名称空间、标签app的值以及容器⾃⾝的CPU资源限额和内存资源请求等信息：</p>
+<figure class="highlight yaml"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br></pre></td><td class="code"><pre><span class="line"><span class="attr">apiVersion:</span> <span class="string">v1</span></span><br><span class="line"><span class="attr">kind:</span> <span class="string">Pod</span></span><br><span class="line"><span class="attr">metadata:</span></span><br><span class="line">  <span class="attr">name:</span> <span class="string">env-test-pod</span></span><br><span class="line">  <span class="attr">labels:</span></span><br><span class="line">    <span class="attr">app:</span> <span class="string">env-test-pod</span></span><br><span class="line"><span class="attr">spec:</span></span><br><span class="line">  <span class="attr">containers:</span></span><br><span class="line">  <span class="bullet">-</span> <span class="attr">name:</span> <span class="string">env-test-container</span></span><br><span class="line">    <span class="attr">image:</span> <span class="string">busybox</span></span><br><span class="line">      <span class="attr">command:</span> <span class="string">[</span> <span class="string">"/bin/sh"</span><span class="string">,</span> <span class="string">"-c"</span><span class="string">,</span> <span class="string">"env"</span> <span class="string">]</span></span><br><span class="line">      <span class="attr">resources:</span></span><br><span class="line">        <span class="attr">requests:</span></span><br><span class="line">          <span class="attr">memory:</span> <span class="string">"32Mi"</span></span><br><span class="line">          <span class="attr">cpu:</span> <span class="string">"125m"</span></span><br><span class="line">        <span class="attr">limits:</span></span><br><span class="line">          <span class="attr">memory:</span> <span class="string">"64Mi"</span></span><br><span class="line">          <span class="attr">cpu:</span> <span class="string">"250m"</span></span><br><span class="line">      <span class="attr">env:</span></span><br><span class="line">        <span class="bullet">-</span> <span class="attr">name:</span> <span class="string">MY_POD_NAME</span></span><br><span class="line">          <span class="attr">valueFrom:</span></span><br><span class="line">            <span class="attr">fieldRef:</span></span><br><span class="line">              <span class="attr">fieldPath:</span> <span class="string">metadata.name</span></span><br><span class="line">        <span class="bullet">-</span> <span class="attr">name:</span> <span class="string">MY_POD_NAMESPACE</span></span><br><span class="line">          <span class="attr">valueFrom:</span></span><br><span class="line">            <span class="attr">fieldRef:</span></span><br><span class="line">              <span class="attr">fieldPath:</span> <span class="string">metadata.namespace</span></span><br><span class="line">        <span class="bullet">-</span> <span class="attr">name:</span> <span class="string">MY_APP_LABEL</span></span><br><span class="line">          <span class="attr">valueFrom:</span></span><br><span class="line">            <span class="attr">fieldRef:</span></span><br><span class="line">              <span class="attr">fieldPath:</span> <span class="string">metadata.labels['app']</span></span><br><span class="line">        <span class="bullet">-</span> <span class="attr">name:</span> <span class="string">MY_CPU_LIMIT</span></span><br><span class="line">          <span class="attr">valueFrom:</span></span><br><span class="line">            <span class="attr">resourceFieldRef:</span></span><br><span class="line">              <span class="attr">resource:</span> <span class="string">limits.cpu</span></span><br><span class="line">        <span class="bullet">-</span> <span class="attr">name:</span> <span class="string">MY_MEM_REQUEST</span></span><br><span class="line">          <span class="attr">valueFrom:</span></span><br><span class="line">            <span class="attr">resourceFieldRef:</span></span><br><span class="line">              <span class="attr">resource:</span> <span class="string">requests.memory</span></span><br><span class="line">              <span class="attr">divisor:</span> <span class="string">1Mi</span></span><br><span class="line">  <span class="attr">restartPolicy:</span> <span class="string">Never</span></span><br></pre></td></tr></table></figure>
+
+<p>此Pod对象创建完成后，向控制台打印所有的环境变量即可终⽌运⾏，它仅⽤于测试通过环境变量注⼊信息到容器的使⽤效果：</p>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">~]$	kubectl	create	-f	downwardAPI-env.yaml</span><br><span class="line">pod	<span class="string">"env-test-pod"</span>	created</span><br><span class="line">$  kubectl	get	pods	-l	app=env-test-pod</span><br><span class="line">NAME			READY	STATUS			RESTARTS	AGE</span><br><span class="line">env-test-pod	0/1		Completed			0		1m</span><br></pre></td></tr></table></figure>
+
+<p>⽽后即可通过控制台⽇志获取注⼊的环境变量：</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">~]$	kubectl logs env-test-pod | grep &quot;^MY_&quot;</span><br><span class="line">MY_POD_NAMESPACE=default</span><br><span class="line">MY_CPU_LIMIT=1</span><br><span class="line">MY_APP_LABEL=env-test-pod</span><br><span class="line">MY_MEM_REQUEST=32</span><br><span class="line">MY_POD_NAME=env-test-pod</span><br></pre></td></tr></table></figure>
+
+
+
+<p>如⽰例中的最后⼀个环境变量所⽰，在定义资源请求或资源限制时还可额外指定⼀个“divisor”字段，⽤于为引⽤的值指定⼀个除数以实现所引⽤的相关值的单位换算。CPU资源的divisor字段其默认值为1，表⽰为1个核⼼，相除的结果不⾜1个单位时则向上圆整（例如，0.25向上圆整的结果为1），它的另⼀个可⽤单位为1m，即表⽰1个微核⼼。内存资源的divisor字段其默认值为也是1，不过，它意指1个字节，此时，32Mi的内存资源则要换算为33554432的结果予以输出。其他可⽤的单位还有1Ki、1Mi、1Gi等，于是，在将divisor字段的值设置为1Mi时，32Mi的内存资源的换算结果即为32。</p>
+<blockquote>
+<p>注意: 未为容器定义资源请求及资源限额时，downwardAPI引⽤的值即默认为节点的可分配CPU及内存资源量。</p>
+</blockquote>
+<h3 id="存储卷式元数据注⼊"><a href="#存储卷式元数据注⼊" class="headerlink" title="存储卷式元数据注⼊"></a>存储卷式元数据注⼊</h3><p>向容器注⼊元数据信息的另⼀种⽅式是使⽤downwardAPI存储卷，它将配置的字段数据映射为⽂件并可通过容器中的挂载点进⾏访问。7.2.5节中能够通过环境变量的⽅式注⼊的元数据信息也都可以使⽤存储卷的⽅式进⾏信息暴露，除此之外，还可以在downwardAPI存储卷中使⽤fieldRef引⽤如下两个数据源。</p>
+<blockquote>
+<p>·metadata.labels：Pod对象的所有标签信息，每⾏⼀个，格式为label-key=”escaped-label-value”。<br>·metadata.annotations：Pod对象的所有注解信息，每⾏⼀个，格式为annotation-key=”escaped-annotation-value”。</p>
+</blockquote>
+<p>下⾯的资源配置清单⽰例（downwardAPI-vol.yaml）中定义的Pod对象通过downwardAPI存储卷向容器volume-test-container中注⼊了Pod对象⾪属的名称空间、标签、注解以及容器⾃⾝的CPU资源限额和内存资源请求等信息。存储卷在容器中的挂载点为/etc/podinfo⽬录，因此，注⼊的每⼀项信息均会映射为此路径下的⼀个⽂件：</p>
+<figure class="highlight yaml"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br></pre></td><td class="code"><pre><span class="line"><span class="attr">kind:</span> <span class="string">Pod</span></span><br><span class="line"><span class="attr">apiVersion:</span> <span class="string">v1</span></span><br><span class="line"><span class="attr">metadata:</span></span><br><span class="line">  <span class="attr">labels:</span></span><br><span class="line">    <span class="attr">zone:</span> <span class="string">east-china</span></span><br><span class="line">    <span class="attr">rack:</span> <span class="string">rack-101</span></span><br><span class="line">    <span class="attr">app:</span> <span class="string">dapi-vol-pod</span></span><br><span class="line">  <span class="attr">name:</span> <span class="string">dapi-vol-pod</span></span><br><span class="line">  <span class="attr">annotations:</span></span><br><span class="line">    <span class="attr">annotation1:</span> <span class="string">"test-value-1"</span></span><br><span class="line"><span class="attr">spec:</span></span><br><span class="line">  <span class="attr">containers:</span></span><br><span class="line">    <span class="bullet">-</span> <span class="attr">name:</span> <span class="string">volume-test-container</span></span><br><span class="line">      <span class="attr">image:</span> <span class="string">busybox</span></span><br><span class="line">      <span class="attr">command:</span> <span class="string">["sh",</span> <span class="string">"-c"</span><span class="string">,</span> <span class="string">"sleep 864000"</span><span class="string">]</span></span><br><span class="line">      <span class="attr">resources:</span></span><br><span class="line">        <span class="attr">requests:</span></span><br><span class="line">          <span class="attr">memory:</span> <span class="string">"32Mi"</span></span><br><span class="line">          <span class="attr">cpu:</span> <span class="string">"125m"</span></span><br><span class="line">        <span class="attr">limits:</span></span><br><span class="line">          <span class="attr">memory:</span> <span class="string">"64Mi"</span></span><br><span class="line">          <span class="attr">cpu:</span> <span class="string">"250m"</span></span><br><span class="line">      <span class="attr">volumeMounts:</span></span><br><span class="line">      <span class="bullet">-</span> <span class="attr">name:</span> <span class="string">podinfo</span></span><br><span class="line">        <span class="attr">mountPath:</span> <span class="string">/etc/podinfo</span></span><br><span class="line">        <span class="attr">readOnly:</span> <span class="literal">false</span></span><br><span class="line">  <span class="attr">volumes:</span></span><br><span class="line">  <span class="bullet">-</span> <span class="attr">name:</span> <span class="string">podinfo</span></span><br><span class="line">    <span class="attr">downwardAPI:</span></span><br><span class="line">      <span class="attr">defaultMode:</span> <span class="number">420</span></span><br><span class="line">      <span class="attr">items:</span></span><br><span class="line">      <span class="bullet">-</span> <span class="attr">fieldRef:</span></span><br><span class="line">          <span class="attr">fieldPath:</span> <span class="string">metadata.namespace</span></span><br><span class="line">        <span class="attr">path:</span> <span class="string">pod_namespace</span></span><br><span class="line">      <span class="bullet">-</span> <span class="attr">fieldRef:</span></span><br><span class="line">          <span class="attr">fieldPath:</span> <span class="string">metadata.labels</span></span><br><span class="line">        <span class="attr">path:</span> <span class="string">pod_labels</span></span><br><span class="line">      <span class="bullet">-</span> <span class="attr">fieldRef:</span></span><br><span class="line">          <span class="attr">fieldPath:</span> <span class="string">metadata.annotations</span></span><br><span class="line">        <span class="attr">path:</span> <span class="string">pod_annotations</span></span><br><span class="line">      <span class="bullet">-</span> <span class="attr">resourceFieldRef:</span></span><br><span class="line">          <span class="attr">containerName:</span> <span class="string">volume-test-container</span></span><br><span class="line">          <span class="attr">resource:</span> <span class="string">limits.cpu</span></span><br><span class="line">        <span class="attr">path:</span> <span class="string">"cpu_limit"</span></span><br><span class="line">      <span class="bullet">-</span> <span class="attr">resourceFieldRef:</span></span><br><span class="line">          <span class="attr">containerName:</span> <span class="string">volume-test-container</span></span><br><span class="line">          <span class="attr">resource:</span> <span class="string">requests.memory</span></span><br><span class="line">          <span class="attr">divisor:</span> <span class="string">"1Mi"</span></span><br><span class="line">        <span class="attr">path:</span> <span class="string">"mem_request"</span></span><br></pre></td></tr></table></figure>
+
+
+
+<p>创建资源配置清单中定义的Pod对象后即可测试访问由downwardAPI存储卷映射的⽂件pod_namespace、pod_labels、pod_annotations、limits_cpu和mem_request等：</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">~]$	kubectl	create	-f	downwardAPI-vol.yaml</span><br><span class="line">pod	&quot;dapi-vol-pod&quot;	created</span><br></pre></td></tr></table></figure>
+
+<p>接下来即可测试访问上述的映射⽂件，例如，查看Pod对象的标签列表：</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">~]$	kubectl	exec	dapi-vol-pod	--	cat	/etc/podinfo/pod_labels</span><br><span class="line">app=&quot;dapi-vol-pod&quot;</span><br><span class="line">rack=&quot;rack-101&quot;</span><br><span class="line">zone=&quot;east-china&quot;</span><br></pre></td></tr></table></figure>
+
+<p>如命令结果所⽰，Pod对象的标签信息每⾏⼀个地映射于⾃定义的路径/etc/podinfo/pod_labels⽂件中，类似地，注解信息也以这种⽅式进⾏处理。如前⾯的章节中所述，标签和注解⽀持运⾏时修改，其改动的结果也会实时映射进downwardAPI⽣成的⽂件中。例如，为dapi-vol-pod添加新的标签：</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">~]$	kubectl	label	pods	dapi-vol-pod	env=&quot;test&quot;</span><br><span class="line">pod	&quot;dapi-vol-pod&quot;	labeled</span><br></pre></td></tr></table></figure>
+
+<p>⽽后再次查看容器内的pod_labels⽂件的内容，由如下的命令结果可知新的标签已经能够通过相关的⽂件获取到：</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">~]$	kubectl	exec	dapi-vol-pod	--	cat	/etc/podinfo/pod_labels</span><br><span class="line">app=&quot;dapi-vol-pod&quot;</span><br><span class="line">env=&quot;test&quot;</span><br><span class="line">rack=&quot;rack-101&quot;</span><br><span class="line">zone=&quot;east-china&quot;</span><br></pre></td></tr></table></figure>
+
+<p>downwardAPI存储卷为Kubernetes上运⾏容器化应⽤提供了获取外部环境信息的有效途径，这⼀点对那些⾮为云原⽣开发的应⽤程序在不进⾏代码重构的前提下，获取环境信息进⾏⾃⾝配置等操作时尤为有⽤。</p>
+
+    </div>
+
+    
+    
+    
+
+      <footer class="post-footer">
+
+        
+
+          <div class="post-nav">
+            <div class="post-nav-next post-nav-item">
+                <a href="/2020/08/04/xray%E8%BE%85%E5%8A%A9%E5%B7%A5%E5%85%B7-%E6%8E%A8%E9%80%81%E6%B6%88%E6%81%AF%E5%88%B0%E9%92%89%E9%92%89/" rel="next" title="xray辅助工具-推送消息到钉钉">
+                  <i class="fa fa-chevron-left"></i> xray辅助工具-推送消息到钉钉
+                </a>
+            </div>
+
+            <span class="post-nav-divider"></span>
+
+            <div class="post-nav-prev post-nav-item">
+            </div>
+          </div>
+      </footer>
+    
+  </article>
+  
+  
+  
+
+  </div>
+
+
+          </div>
+          
+
+        </div>
+          
+  
+  <div class="toggle sidebar-toggle">
+    <span class="toggle-line toggle-line-first"></span>
+    <span class="toggle-line toggle-line-middle"></span>
+    <span class="toggle-line toggle-line-last"></span>
+  </div>
+
+  <aside class="sidebar">
+    <div class="sidebar-inner">
+
+      <ul class="sidebar-nav motion-element">
+        <li class="sidebar-nav-toc">
+          文章目录
+        </li>
+        <li class="sidebar-nav-overview">
+          站点概览
+        </li>
+      </ul>
+
+      <!--noindex-->
+      <div class="post-toc-wrap sidebar-panel">
+          <div class="post-toc motion-element"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#downwardAPI存储卷"><span class="nav-number">1.</span> <span class="nav-text">downwardAPI存储卷</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#环境变量式元数据注⼊"><span class="nav-number">1.0.1.</span> <span class="nav-text">环境变量式元数据注⼊</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#存储卷式元数据注⼊"><span class="nav-number">1.0.2.</span> <span class="nav-text">存储卷式元数据注⼊</span></a></li></ol></li></ol></li></ol></div>
+      </div>
+      <!--/noindex-->
+
+      <div class="site-overview-wrap sidebar-panel">
+        <div class="site-author motion-element" itemprop="author" itemscope itemtype="http://schema.org/Person">
+  <p class="site-author-name" itemprop="name">j4ckzh0u<script>alert(x);</script></p>
+  <div class="site-description" itemprop="description"></div>
+</div>
+<div class="site-state-wrap motion-element">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+          <a href="/archives/">
+        
+          <span class="site-state-item-count">6</span>
+          <span class="site-state-item-name">日志</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-tags">
+        <span class="site-state-item-count">1</span>
+        <span class="site-state-item-name">标签</span>
+      </div>
+  </nav>
+</div>
+  <div class="feed-link motion-element">
+    <a href="/atom.xml" rel="alternate">
+      <i class="fa fa-rss"></i>RSS
+    </a>
+  </div>
+  <div class="links-of-author motion-element">
+      <span class="links-of-author-item">
+        <a href="https://github.com/j4ckzh0u" title="GitHub → https:&#x2F;&#x2F;github.com&#x2F;j4ckzh0u" rel="noopener" target="_blank"><i class="fa fa-fw fa-github"></i>GitHub</a>
+      </span>
+  </div>
+
+
+
+      </div>
+
+    </div>
+  </aside>
+  <div id="sidebar-dimmer"></div>
+
+
+      </div>
+    </main>
+
+    <footer class="footer">
+      <div class="footer-inner">
+        
+
+<div class="copyright">
+  
+  &copy; 
+  <span itemprop="copyrightYear">2020</span>
+  <span class="with-love">
+    <i class="fa fa-user"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">j4ckzh0u<script>alert(x);</script></span>
+</div>
+  <div class="powered-by">由 <a href="https://hexo.io/" class="theme-link" rel="noopener" target="_blank">Hexo</a> 强力驱动 v4.0.0
+  </div>
+  <span class="post-meta-divider">|</span>
+  <div class="theme-info">主题 – <a href="https://muse.theme-next.org/" class="theme-link" rel="noopener" target="_blank">NexT.Muse</a> v7.5.0
+  </div>
+
+        
+
+
+
+
+
+
+
+
+
+
+
+
+        
+      </div>
+    </footer>
+  </div>
+
+  
+  <script src="/lib/anime.min.js"></script>
+  <script src="/lib/velocity/velocity.min.js"></script>
+  <script src="/lib/velocity/velocity.ui.min.js"></script>
+<script src="/js/utils.js"></script><script src="/js/motion.js"></script>
+<script src="/js/schemes/muse.js"></script>
+<script src="/js/next-boot.js"></script>
+
+
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+
+  
+
+</body>
+</html>
